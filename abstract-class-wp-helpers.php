@@ -1,6 +1,5 @@
 <?php
-// Please note that it's recommended to use the namespaces in your plugins.
-// namespace YourCompanyName\PluginNameOrSomething;
+namespace PiotrSzczygiel\WordPressPluginsTools\YourPluginName;
 
 /**
  * This class contains a set of methods which can be useful when implementing
@@ -10,7 +9,7 @@
  * @author Piotr Szczygiel <psz.szczygiel@gmail.com>
  * @link https://github.com/piotr-szczygiel/wp-helpers - check out latest version
  * @license MIT
- * @version 1.1
+ * @version 1.2
  */
 abstract class wp_helpers
 {
@@ -18,6 +17,21 @@ abstract class wp_helpers
     const MIN_PREFIX = '-min';
     // path for plugin's JS files
     const JS_ASSETS_PATH = 'assets/js/';
+
+    /**
+     * This property contains an information about in which class (1st element of the array)
+     * and method (2nd element of the array) helper will look for the translation.
+     * Remember that this method needs to contain only one input parameter and should
+     * return the string.
+     * @var array
+     */
+    private $translation_info = array( 'SomeCompany\SomeNamespace\translationsClass', 'get_translation' );
+
+    /**
+     * The object of class defined in $translation_info property
+     * @var mixed
+     */
+    private $translation_object = null;
 
     /**
      * Method can be used when you want to use packed JavaScript files.
@@ -53,17 +67,42 @@ abstract class wp_helpers
     }
 
     /**
-     * Registering an ajax functions. Method supports both: admin and non-admin 
+     * This method is an interface for returning translation strings. Simply configureate the
+     * $translation_info property and create adequate class to start using it.
+     * @param string $key
+     * @return string
+     * @throws \Exception
+     */
+    protected function get_translation( $key )
+    {
+        // check whether class exists
+        if ( !class_exists( $this->translation_info[0] ) ) {
+            throw new \Exception( 'Class defined in $translation_info property doesn\'t exist' );
+        }
+
+        // create an instance of translation class
+        $this->translation_object = new $this->translation_info[0];
+
+        if ( !method_exists( $this->translation_object , $this->translation_info[1] ) ) {
+            throw new \Exception( 'Method defined in $translation_info property doesn\'t exist' );
+        }
+
+        $method = $this->translation_info[1];
+        return $this->translation_object->$method( $key );
+    }
+
+    /**
+     * Registering an ajax functions. Method supports both: admin and non-admin
      * user typing.
      * @param string $name
      * @param array|string $callback
      * @param boolean $admin_only
      */
-    protected function register_ajax_function( $name, $callback , $admin_only = true )
+    protected function register_ajax_function( $name, $callback, $admin_only = true )
     {
         add_action( 'wp_ajax_' . $name, $callback );
         if ( $admin_only === false ) {
             add_action( 'wp_ajax_nopriv_' . $name, $callback );
         }
-    }    
+    }
 }
