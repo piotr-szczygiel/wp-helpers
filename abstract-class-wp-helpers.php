@@ -1,15 +1,19 @@
 <?php
-namespace PiotrSzczygiel\WordPressPluginsTools\YourPluginName;
+namespace PiotrSzczygiel\YourPluginName\Classes\Vendor;
 
 /**
  * This class contains a set of methods which can be useful when implementing
  * own WordPress plugins. Class is designed for extending other classes, so all
  * of its methods should be declared as protected (or private in some cases).
  *
+ * Class can use translation service, to make the world better :) If you want to take
+ * advantage of such feature, please check out my simple translation service and use
+ * inside this class: https://github.com/piotr-szczygiel/wp-translator
+ *
  * @author Piotr Szczygiel <psz.szczygiel@gmail.com>
  * @link https://github.com/piotr-szczygiel/wp-helpers - check out latest version
  * @license MIT
- * @version 1.2
+ * @version 1.3
  */
 abstract class wp_helpers
 {
@@ -18,18 +22,26 @@ abstract class wp_helpers
     // path for plugin's JS files
     const JS_ASSETS_PATH = 'assets/js/';
 
+    // identifier of current plugin (use set_identifiers to set its data)
+    protected static $plugin_identifier = '';
+
+    // path to plugin file
+    private static $plugin_file = '';
+
     /**
      * This property contains an information about in which class (1st element of the array)
      * and method (2nd element of the array) helper will look for the translation.
      * Remember that this method needs to contain only one input parameter and should
      * return the string.
+     *
      * @var array
      */
-    private $translation_info = array( 'SomeCompany\SomeNamespace\translationsClass', 'get_translation' );
+    private $translation_info = array( 'Translator', 'get_translation' );
 
     /**
      * The object of class defined in $translation_info property
-     * @var mixed
+     *
+     * @var Translator
      */
     private $translation_object = null;
 
@@ -46,6 +58,7 @@ abstract class wp_helpers
      *   - define( 'WP_DEBUG_LOG', true );
      *   - define( 'WP_DEBUG_DISPLAY', false );
      * You can also use only minified files (f.e third party plugins) by setting $debug parameter as true.
+     *
      * @param string $identifier
      * @param string $file
      * @param string $plugin_file
@@ -56,53 +69,121 @@ abstract class wp_helpers
     {
         // debug mode
         if ( $debug === true && WP_DEBUG === true && WP_DEBUG_LOG === true && WP_DEBUG_DISPLAY === false ) {
-            $file_path = 'unpacked/' . str_replace( self::MIN_PREFIX, '', $file );
-        }
-        // live mode
+            $file_path = 'unpacked/'.str_replace( self::MIN_PREFIX, '', $file );
+        } // live mode
         else {
             $file_path = $file;
         }
 
-        wp_enqueue_script( $identifier, plugins_url( self::JS_ASSETS_PATH . $file_path, $plugin_file ), $dep );
+        wp_enqueue_script( $identifier, plugins_url( self::JS_ASSETS_PATH.$file_path, $plugin_file ), $dep );
     }
 
     /**
      * This method is an interface for returning translation strings. Simply configureate the
      * $translation_info property and create adequate class to start using it.
+     *
      * @param string $key
      * @return string
      * @throws \Exception
      */
     protected function get_translation( $key )
     {
-        // check whether class exists
-        if ( !class_exists( $this->translation_info[0] ) ) {
-            throw new \Exception( 'Class defined in $translation_info property doesn\'t exist' );
-        }
-
-        // create an instance of translation class
-        $this->translation_object = new $this->translation_info[0];
-
-        if ( !method_exists( $this->translation_object , $this->translation_info[1] ) ) {
-            throw new \Exception( 'Method defined in $translation_info property doesn\'t exist' );
-        }
-
         $method = $this->translation_info[1];
-        return $this->translation_object->$method( $key );
+
+        return $this->get_translator()->$method( $key );
     }
 
     /**
      * Registering an ajax functions. Method supports both: admin and non-admin
      * user typing.
+     *
      * @param string $name
      * @param array|string $callback
      * @param boolean $admin_only
      */
     protected function register_ajax_function( $name, $callback, $admin_only = true )
     {
-        add_action( 'wp_ajax_' . $name, $callback );
+        add_action( 'wp_ajax_'.$name, $callback );
+
         if ( $admin_only === false ) {
             add_action( 'wp_ajax_nopriv_' . $name, $callback );
         }
+    }
+
+    /**
+     * Set the properties required for
+     *
+     * @param $plugin_identifier
+     * @param $plugin_file
+     */
+    public static function set_identifiers( $plugin_identifier, $plugin_file )
+    {
+        self::$plugin_identifier = $plugin_identifier;
+        self::$plugin_file = $plugin_file;
+    }
+
+    /**
+     * Returns a path to plugin file
+     *
+     * @return string
+     */
+    public static function get_plugin_file()
+    {
+        return self::$plugin_file;
+    }
+
+    /**
+     * Returns the path of current plugin
+     *
+     * @return string
+     */
+    public static function get_plugin_path()
+    {
+        return trailingslashit( plugin_dir_path( self::get_plugin_file() ) );
+    }
+
+    /**
+     * Method returns a value of given option name (set on plugin settings page).
+     * In case value is not set, it returns a default type value.
+     *
+     * @param string $name
+     * @param mixed $default_value
+     * @return mixed
+     */
+    public static function get_setting_option( $name, $default_value )
+    {
+        $options = get_option( self::$plugin_identifier );
+
+        if ( isset( $options[$name] ) && gettype( $default_value ) === gettype( $options[$name] ) ) {
+            return $options[$name];
+        }
+
+        return $default_value;
+    }
+
+    /**
+     * Returns the object responsible for translating
+     *
+     * @return Translator
+     * @throws \Exception
+     */
+    public function get_translator()
+    {
+        if ( is_null( $this->translation_object ) ) {
+
+            // check whether class exists
+            if ( !class_exists( $this->translation_info[0] ) ) {
+                throw new \Exception( 'Class defined in $translation_info property doesn\'t exist' );
+            }
+
+            // create an instance of translation class
+            $this->translation_object = new $this->translation_info[0];
+        }
+
+        if ( !method_exists( $this->translation_object, $this->translation_info[1] ) ) {
+            throw new \Exception( 'Method defined in $translation_info property doesn\'t exist' );
+        }
+
+        return $this->translation_object;
     }
 }
